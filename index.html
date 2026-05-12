@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BusinessIT Neon Tombola Casino</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Encode+Sans:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        /* =========================================
+           VÁLTOZÓK ÉS ALAPBEÁLLÍTÁSOK
+           ========================================= */
+        :root {
+            --bg-dark: #120924; 
+            --bg-darker: #080312;
+            --neon-cyan: #00f3ff;
+            --neon-cyan-dim: rgba(0, 243, 255, 0.4);
+            --neon-orange: #ff9900;
+            --neon-pink: #d800ff;
+            --machine-silver: #8b93a0;
+            --machine-dark: #2c313a;
+            --screen-bg: #050510;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* --- CANVAS HÁTTÉR --- */
+        #network-canvas {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 1; pointer-events: none;
+            transition: filter 1s ease;
+        }
+
+        /* =========================================
+           A NYERŐGÉP TESTE (Machine Shell)
+           ========================================= */
+        .machine-container {
+            position: relative;
+            z-index: 10;
+            perspective: 2000px;
+            transition: filter 0.8s ease, transform 0.8s ease;
+            width: 95%;
+            max-width: 480px;
+        }
+
+        .machine-outer {
+            background: linear-gradient(180deg, #a5b1c2 0%, #4b6584 100%);
+            padding: 8px;
+            border-radius: 40px 40px 20px 20px;
+            box-shadow: 
+                0 30px 60px rgba(0,0,0,0.8),
+                0 0 0 4px #2f3640,
+                0 0 30px var(--neon-cyan-dim),
+                inset 0 0 20px rgba(255,255,255,0.5);
+            position: relative;
+            transition: all 0.5s ease;
+            width: 100%;
+        }
+
+        .machine-inner {
+            background: linear-gradient(180deg, #576574 0%, #222f3e 100%);
+            padding: 30px 25px 40px 25px;
+            border-radius: 32px 32px 15px 15px;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.9);
+            border: 2px solid #8395a7;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+        }
+
+        /* Neon kontúr a gépen belül */
+        .machine-inner::before {
+            content: '';
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            border: 3px solid var(--neon-cyan);
+            border-radius: 25px 25px 10px 10px;
+            box-shadow: 0 0 15px var(--neon-cyan), inset 0 0 15px var(--neon-cyan);
+            pointer-events: none;
+            z-index: 20;
+            transition: all 0.5s ease;
+        }
+
+        /* =========================================
+           KIJELZŐK ÉS KÉPERNYŐK (CRT EFFEKTEK)
+           ========================================= */
+        .crt-screen {
+            background: var(--screen-bg);
+            border: 4px solid #111;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.2);
+            z-index: 21;
+            width: 100%;
+        }
+
+        .crt-screen::after {
+            content: " "; display: block; position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2; background-size: 100% 4px, 6px 100%; pointer-events: none;
+        }
+
+        .scan-line {
+            width: 100%; height: 5px; background: rgba(0, 243, 255, 0.3);
+            position: absolute; z-index: 3; animation: scan 4s linear infinite; opacity: 0.5; pointer-events: none;
+        }
+
+        @keyframes scan { 0% { top: -10%; } 100% { top: 110%; } }
+
+        .top-display { padding: 15px 10px; text-align: center; }
+        .top-display h1 {
+            font-family: 'VT323', monospace; margin: 0; font-size: 2.5rem; color: #fff;
+            text-shadow: 0 0 10px #fff, 0 0 20px var(--neon-pink), 0 0 30px var(--neon-pink);
+            line-height: 1.1; letter-spacing: 2px;
+        }
+
+        .bottom-display { padding: 15px; text-align: center; min-height: 65px; display: flex; align-items: center; justify-content: center;}
+        .bottom-display p {
+            margin: 0; font-size: 1.4rem; color: #fff;
+            text-shadow: 0 0 10px #fff, 0 0 20px var(--neon-cyan);
+            letter-spacing: 1px; text-transform: uppercase;
+        }
+
+        /* =========================================
+           TÁRCSÁK (REELS)
+           ========================================= */
+        .reels-container {
+            display: flex; gap: 15px; padding: 15px; background: #111;
+            border-radius: 15px; z-index: 21; box-shadow: inset 0 10px 20px rgba(0,0,0,0.8);
+            justify-content: center; width: 100%;
+        }
+
+        .reel-window {
+            width: 110px; height: 180px; background: var(--screen-bg);
+            border: 3px solid var(--neon-cyan); border-radius: 10px;
+            box-shadow: 0 0 15px var(--neon-cyan), inset 0 0 20px var(--neon-cyan-dim);
+            overflow: hidden; position: relative;
+        }
+
+        .reel-window::after {
+            content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 3px;
+            background: rgba(255, 153, 0, 0.5); transform: translateY(-50%);
+            box-shadow: 0 0 8px var(--neon-orange); z-index: 5; pointer-events: none;
+        }
+
+        .reel-strip {
+            display: flex; flex-direction: column; width: 100%; position: absolute;
+            top: 0; left: 0; will-change: transform;
+        }
+
+        .symbol {
+            width: 110px; height: 180px; display: flex; align-items: center; justify-content: center;
+            font-size: 4rem; box-sizing: border-box; border-bottom: 1px solid rgba(0, 243, 255, 0.1);
+            filter: drop-shadow(0 0 10px rgba(0, 243, 255, 0.5));
+        }
+
+        .shape-triangle { width: 0; height: 0; border-left: 35px solid transparent; border-right: 35px solid transparent; border-bottom: 60px solid var(--neon-cyan); filter: drop-shadow(0 0 10px var(--neon-cyan)); }
+        .shape-square { width: 60px; height: 60px; border: 8px solid var(--neon-orange); box-shadow: 0 0 15px var(--neon-orange), inset 0 0 15px var(--neon-orange); }
+        .shape-circle { width: 70px; height: 70px; border: 8px solid var(--neon-cyan); border-radius: 50%; background-color: var(--neon-cyan); box-shadow: 0 0 15px var(--neon-cyan); }
+        .shape-diamond { width: 50px; height: 50px; border: 8px solid var(--neon-pink); transform: rotate(45deg); box-shadow: 0 0 15px var(--neon-pink), inset 0 0 15px var(--neon-pink); }
+
+        /* =========================================
+           A KAR (LEVER) 
+           ========================================= */
+        .lever-assembly {
+            position: absolute; right: -60px; top: 50%; transform: translateY(-50%);
+            width: 60px; height: 300px; perspective: 800px; z-index: 5;
+            cursor: pointer;
+        }
+
+        .lever-base { position: absolute; left: 0; top: 120px; width: 30px; height: 60px; background: #555; border: 2px solid #222; border-radius: 0 10px 10px 0; box-shadow: inset 0 -5px 10px rgba(0,0,0,0.5), 5px 5px 15px rgba(0,0,0,0.8); }
+        .lever-arm { position: absolute; left: 13px; bottom: 120px; width: 16px; height: 160px; background: linear-gradient(to right, #666, #ccc, #555); border-radius: 8px; transform-origin: bottom center; transform-style: preserve-3d; transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1); box-shadow: inset 0 0 5px #000, -5px 5px 10px rgba(0,0,0,0.6); }
+        .lever-arm.pulled { transform: rotateX(65deg) scaleY(1.05); }
+        .lever-knob { position: absolute; top: -30px; left: -17px; width: 50px; height: 50px; background: var(--neon-cyan); border-radius: 50%; box-shadow: 0 0 20px var(--neon-cyan), inset -5px -5px 15px rgba(0,0,0,0.5); transition: background 0.3s, box-shadow 0.3s; }
+
+        /* =========================================
+           KIFIZETŐ NYÍLÁS (DISPENSER)
+           ========================================= */
+        .dispenser-area { position: absolute; bottom: -30px; left: 50%; transform: translateX(-50%); width: 100px; height: 30px; background: #050505; border: 3px solid var(--machine-dark); border-top: none; border-radius: 0 0 15px 15px; box-shadow: inset 0 10px 15px rgba(0,0,0,0.9); z-index: 5; display: flex; justify-content: center; }
+        #outlet-tickets { position: absolute; top: 0; display: flex; flex-direction: column; gap: 2px; z-index: 4; }
+        .dispensed-ticket { width: 80px; height: 35px; background: #111; border: 2px dashed var(--neon-orange); color: var(--neon-orange); font-size: 0.7rem; font-weight: bold; display: flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(-20px); transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 5px 10px rgba(0,0,0,0.8); }
+        .dispensed-ticket.show { opacity: 1; transform: translateY(10px); }
+
+        #poop-emoji { position: absolute; top: -10px; font-size: 2.5rem; opacity: 0; transform: translateY(-20px); transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 4; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.5)); }
+        .poop-anim { opacity: 1 !important; transform: translateY(15px) !important; }
+
+        /* =========================================
+           EUFÓRIA OVERLAY ÉS ELŐTÉR ANIMÁCIÓK
+           ========================================= */
+        #eupohria-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 16, 0.7); backdrop-filter: blur(8px); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.8s ease; }
+        #eupohria-overlay.active { opacity: 1; pointer-events: all; }
+        #presentation-container { position: relative; width: 100%; height: 300px; display: flex; align-items: center; justify-content: center; }
+
+        .flying-ticket { position: absolute; width: 250px; height: 130px; background-color: var(--neon-orange); background-image: radial-gradient(circle at 0 50%, transparent 15px, var(--neon-orange) 16px), radial-gradient(circle at 100% 50%, transparent 15px, var(--neon-orange) 16px); background-size: 51% 100%; background-repeat: no-repeat; box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 30px rgba(255, 153, 0, 0.3); border-radius: 8px; color: #fff; display: flex; align-items: center; justify-content: center; opacity: 0; top: 50% !important; margin-top: -65px; transform-origin: center center; transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-family: 'Encode Sans', sans-serif; z-index: 100; }
+        .flying-ticket-inner { font-size: 2.2rem; font-weight: 900; letter-spacing: 4px; text-transform: uppercase; border: 3px dashed rgba(255,255,255,0.7); border-radius: 10px; padding: 15px 30px; }
+
+        .flying-poop { position: absolute; font-size: 8rem; filter: drop-shadow(0 0 30px #ff3333); opacity: 0; top: 50% !important; margin-top: -60px; transform: scale(0.1) translateY(50px); transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 100; }
+
+        .presented-message { font-size: 2.5rem; font-weight: 900; color: #fff; text-align: center; margin-top: 40px; opacity: 0; transform: scale(0.8); transition: all 0.5s ease; transition-delay: 1s; text-shadow: 0 0 10px rgba(0,0,0,0.8); }
+        #eupohria-overlay.active .presented-message { opacity: 1; transform: scale(1); }
+
+        .close-btn { margin-top: 40px; padding: 15px 40px; font-size: 1.5rem; font-family: 'Share Tech Mono', monospace; color: var(--neon-cyan); background: rgba(0,0,0,0.5); border: 2px solid var(--neon-cyan); border-radius: 5px; cursor: pointer; transition: all 0.3s ease; opacity: 0; transition-delay: 1.5s; box-shadow: 0 0 15px rgba(0, 243, 255, 0.3); z-index: 1000; }
+        #eupohria-overlay.active .close-btn { opacity: 1; }
+        .close-btn:hover { background: var(--neon-cyan); color: #000; box-shadow: 0 0 30px var(--neon-cyan); }
+
+        /* Gép homályosítása */
+        body.overlay-active .machine-container { filter: blur(10px) brightness(0.6); transform: scale(0.95); }
+        body.overlay-active #network-canvas { filter: blur(5px); }
+
+        /* ÁLLAPOT SZÍNEZÉS */
+        body.win-state .machine-outer { box-shadow: 0 30px 60px rgba(0,0,0,0.8), 0 0 60px var(--neon-orange); }
+        body.win-state .bottom-display p { color: var(--neon-orange); text-shadow: 0 0 20px var(--neon-orange); }
+        body.win-state .machine-inner::before { border-color: var(--neon-orange); box-shadow: 0 0 20px var(--neon-orange), inset 0 0 20px var(--neon-orange); }
+        body.win-state .lever-knob { background: var(--neon-orange); box-shadow: 0 0 30px var(--neon-orange), inset -5px -5px 15px rgba(0,0,0,0.5); }
+
+        body.loss-state .machine-outer { filter: grayscale(0.5) brightness(0.6); }
+        body.loss-state .bottom-display p { color: #ff3333; text-shadow: 0 0 10px #ff0000; }
+        body.loss-state .machine-inner::before { border-color: #550000; box-shadow: none; }
+        body.loss-state .lever-knob { background: #ff3333; box-shadow: 0 0 20px #ff3333, inset -5px -5px 15px rgba(0,0,0,0.5); }
+
+        /* =========================================
+           KONFETTI / ESŐ EFFEKTEK
+           ========================================= */
+        #rain-container {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 999;
+            overflow: hidden;
+        }
+
+        /* Nyerő konfetti animáció (Lassú forgó esés) */
+        .win-item {
+            position: absolute;
+            top: -10vh;
+            animation: fall-slow linear infinite;
+        }
+        @keyframes fall-slow {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            80% { opacity: 1; }
+            100% { transform: translateY(115vh) rotate(360deg); opacity: 0; }
+        }
+
+        /* Vesztő lézer/eső animáció (Gyors zuhanás forgás nélkül) */
+        .loss-rain-drop {
+            position: absolute;
+            top: -10vh;
+            width: 3px;
+            background: linear-gradient(to bottom, rgba(255, 51, 51, 0), #ff3333);
+            box-shadow: 0 0 15px #ff3333;
+            border-radius: 2px;
+            animation: fall-fast linear infinite;
+        }
+        
+        /* Halott/szomorú malac a vörös esőben */
+        .loss-pig {
+            position: absolute;
+            top: -10vh;
+            animation: fall-fast linear infinite;
+            filter: grayscale(100%) opacity(0.4); /* Szellem-szerű, fakó malac */
+            transform-origin: center;
+        }
+
+        @keyframes fall-fast {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(115vh); opacity: 0; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="network-canvas"></canvas>
+
+    <div id="rain-container"></div>
+
+    <div class="machine-container" id="machine-wrapper">
+        <div class="machine-outer" id="machine">
+            <div class="machine-inner">
+                <div class="crt-screen top-display">
+                    <div class="scan-line"></div>
+                    <h1>BUSINESSIT<br>GRAND CASINO</h1>
+                </div>
+                <div class="reels-container">
+                    <div class="reel-window"><div class="reel-strip" id="reel1"></div></div>
+                    <div class="reel-window"><div class="reel-strip" id="reel2"></div></div>
+                    <div class="reel-window"><div class="reel-strip" id="reel3"></div></div>
+                </div>
+                <div class="crt-screen bottom-display">
+                    <div class="scan-line"></div>
+                    <p id="message">KATTINTS A KARRA!</p>
+                </div>
+            </div>
+            <div class="dispenser-area">
+                <div id="poop-emoji">🐷💩</div>
+                <div id="outlet-tickets"></div>
+            </div>
+            <div class="lever-assembly" id="lever" onclick="pullLever()">
+                <div class="lever-base"></div>
+                <div class="lever-arm" id="lever-arm">
+                    <div class="lever-knob"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="eupohria-overlay">
+        <div id="presentation-container"></div>
+        <div class="presented-message" id="overlay-reason"></div>
+        <button class="close-btn" onclick="closeOverlay()">TOVÁBB</button>
+    </div>
+
+    <script>
+        const SYMBOLS = ['pig', 'laptop', 'tri', 'sq', 'circ', 'diamond'];
+        const SYM_HEIGHT = 180; 
+        
+        const ui = {
+            reels: [document.getElementById('reel1'), document.getElementById('reel2'), document.getElementById('reel3')],
+            message: document.getElementById('message'),
+            stick: document.getElementById('lever-arm'),
+            outTickets: document.getElementById('outlet-tickets'),
+            outPoop: document.getElementById('poop-emoji'),
+            overlay: document.getElementById('eupohria-overlay'),
+            overlayReason: document.getElementById('overlay-reason'),
+            presentationArea: document.getElementById('presentation-container'),
+            rainContainer: document.getElementById('rain-container')
+        };
+        
+        let isSpinning = false;
+        let finalResults = [];
+
+        const getSymbolHTML = (type) => {
+            if(type === 'pig') return `<div class="symbol">🐷</div>`;
+            if(type === 'laptop') return `<div class="symbol">💻</div>`;
+            if(type === 'tri') return `<div class="symbol"><div class="shape-triangle"></div></div>`;
+            if(type === 'sq') return `<div class="symbol"><div class="shape-square"></div></div>`;
+            if(type === 'circ') return `<div class="symbol"><div class="shape-circle"></div></div>`;
+            if(type === 'diamond') return `<div class="symbol"><div class="shape-diamond"></div></div>`;
+            return `<div class="symbol">🐷</div>`; 
+        };
+
+        function initReels() {
+            ui.reels.forEach(reel => {
+                reel.innerHTML = '';
+                const randomSymbol = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+                const div = document.createElement('div');
+                div.className = 'symbol'; div.textContent = randomSymbol;
+                reel.appendChild(div);
+                reel.style.transform = `translate3d(0, 0px, 0)`;
+            });
+        }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const SFX = {
+            play: (f, t, d, v, slide) => {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = t; o.connect(g); g.connect(audioCtx.destination);
+                o.frequency.setValueAtTime(f, audioCtx.currentTime);
+                if(slide) o.frequency.exponentialRampToValueAtTime(slide, audioCtx.currentTime + d);
+                g.gain.setValueAtTime(v, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
+                o.start(); o.stop(audioCtx.currentTime + d);
+            },
+            pull: () => SFX.play(250, 'square', 0.1, 0.05, 100),
+            release: () => SFX.play(150, 'sawtooth', 0.2, 0.1, 50),
+            tick: () => SFX.play(1000, 'sine', 0.02, 0.02),
+            stop: () => SFX.play(200, 'square', 0.1, 0.1, 100),
+            win: () => { [300, 400, 500, 600, 800].forEach((f, i) => setTimeout(() => SFX.play(f, 'square', 0.15, 0.1), i*150)); },
+            loss: () => SFX.play(120, 'sawtooth', 0.5, 0.1, 60),
+            ticketPop: () => SFX.play(600, 'sine', 0.15, 0.1, 1200)
+        };
+
+        function pullLever() {
+            if (isSpinning) return;
+            isSpinning = true;
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            
+            SFX.pull();
+            ui.stick.classList.add('pulled'); 
+            
+            setTimeout(() => {
+                ui.stick.classList.remove('pulled'); 
+                SFX.release();
+                startSpin(); 
+            }, 400); 
+        }
+
+        function startSpin() {
+            document.body.classList.remove('win-state', 'loss-state', 'overlay-active');
+            ui.overlay.classList.remove('active');
+            ui.outTickets.innerHTML = '';
+            ui.outPoop.classList.remove('poop-anim');
+            stopRain();
+            
+            ui.message.textContent = "PÖRGETÉS...";
+            
+            finalResults = [
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
+            ];
+
+            const stopTimes = [1500, 2500, 3800]; 
+
+            ui.reels.forEach((reel, index) => {
+                const currentSymbol = reel.lastElementChild ? reel.lastElementChild.textContent : '🐷';
+                
+                reel.innerHTML = '';
+                reel.style.transition = 'none'; 
+                
+                let html = getSymbolHTML(finalResults[index]);
+                const spins = 30 + (index * 25); 
+                for(let i=0; i < spins; i++) html += getSymbolHTML(SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+                html += currentSymbol; 
+                reel.innerHTML = html;
+
+                const startPos = -(spins + 1) * SYM_HEIGHT;
+                reel.style.transform = `translate3d(0, ${startPos}px, 0)`;
+                reel.offsetHeight; 
+
+                setTimeout(() => {
+                    reel.style.transition = `transform ${stopTimes[index]}ms cubic-bezier(0.15, 0.85, 0.2, 1)`;
+                    reel.style.transform = `translate3d(0, 0px, 0)`;
+                }, 50);
+
+                setTimeout(() => { SFX.stop(); }, stopTimes[index]);
+
+                if (index === 2) {
+                    setTimeout(() => evaluateGame(), stopTimes[index] + 300);
+                }
+            });
+        }
+
+        function evaluateGame() {
+            const pigCount = finalResults.filter(s => s === 'pig').length;
+            let ticketCount = 0;
+            let winReason = "";
+
+            if (pigCount === 3) {
+                ticketCount = 5; winReason = "JACKPOT! HÁROM RÖFI!";
+            } else if (pigCount === 2) {
+                ticketCount = 2; winReason = "KÉT RÖFI!";
+            } else if (pigCount === 1) {
+                ticketCount = 1; winReason = "EGY RÖFI!";
+            } else {
+                const [s1, s2, s3] = finalResults;
+                if (s1 === s2 && s2 === s3) {
+                    ticketCount = 3; winReason = "HÁROM EGYFORMA!";
+                } else {
+                    ticketCount = 0;
+                }
+            }
+
+            if (ticketCount > 0) {
+                document.body.classList.add('win-state');
+                ui.message.textContent = winReason;
+                SFX.win();
+                dispenseTicketsSequence(ticketCount, winReason);
+            } else {
+                document.body.classList.add('loss-state');
+                ui.message.textContent = "SAJNOS NEM NYERTÉL.";
+                SFX.loss();
+                dispensePoopSequence();
+            }
+        }
+
+        function dispenseTicketsSequence(count, reason) {
+            const interval = 600; 
+            for(let i=0; i<count; i++) {
+                setTimeout(() => {
+                    SFX.ticketPop();
+                    let t = document.createElement('div');
+                    t.className = 'dispensed-ticket';
+                    t.textContent = `TOMBOLA ${i+1}`;
+                    ui.outTickets.insertBefore(t, ui.outTickets.firstChild);
+                    
+                    t.offsetWidth; 
+                    t.classList.add('show'); 
+
+                    if(i === count - 1) {
+                        setTimeout(() => triggerTicketsPresentation(count, reason), 1200);
+                    }
+                }, i * interval);
+            }
+        }
+
+        function triggerTicketsPresentation(count, reason) {
+            ui.presentationArea.innerHTML = ''; 
+            ui.overlayReason.innerHTML = `${reason}<br><span style="color: var(--neon-orange); font-size: 3rem; text-shadow: 0 0 20px var(--neon-orange);">${count} DB TOMBOLA</span>`;
+            ui.overlay.classList.add('active');
+            document.body.classList.add('overlay-active'); 
+            
+            startRain('win');
+
+            const angleStep = 20;
+            const startAngle = ((count - 1) / 2) * -angleStep;
+
+            for(let i=0; i<count; i++) {
+                setTimeout(() => {
+                    SFX.ticketPop(); 
+                    let ticket = document.createElement('div');
+                    ticket.className = 'flying-ticket';
+                    ticket.innerHTML = '<div class="flying-ticket-inner">TOMBOLA</div>';
+                    ui.presentationArea.appendChild(ticket);
+
+                    ticket.offsetWidth; 
+                    let currentAngle = startAngle + (i * angleStep);
+                    ticket.style.transform = `rotate(${currentAngle}deg) translateY(-50px)`;
+                    ticket.style.opacity = 1;
+                }, 100 + (i * 250)); 
+            }
+        }
+
+        function dispensePoopSequence() {
+            ui.outPoop.classList.add('poop-anim');
+            setTimeout(() => {
+                triggerPoopPresentation();
+            }, 1200);
+        }
+
+        function triggerPoopPresentation() {
+            ui.presentationArea.innerHTML = ''; 
+            ui.overlayReason.innerHTML = `SAJNOS MOST NINCS NYEREMÉNY.<br><span style="color: #ff3333; font-size: 2.5rem; text-shadow: 0 0 20px #ff3333;">KÖVETKEZŐRE TALÁN SIKERÜL!</span>`;
+            ui.overlay.classList.add('active');
+            document.body.classList.add('overlay-active'); 
+            
+            startRain('loss');
+
+            setTimeout(() => {
+                SFX.ticketPop(); 
+                let poop = document.createElement('div');
+                poop.className = 'flying-poop';
+                poop.innerHTML = '🐷💩';
+                ui.presentationArea.appendChild(poop);
+
+                poop.offsetWidth; 
+                poop.style.transform = `scale(1) translateY(-50px)`;
+                poop.style.opacity = 1;
+            }, 300);
+        }
+
+        function closeOverlay() {
+            ui.overlay.classList.remove('active');
+            document.body.classList.remove('overlay-active');
+            stopRain();
+            
+            setTimeout(() => {
+                ui.presentationArea.innerHTML = '';
+                ui.outTickets.innerHTML = '';
+                ui.outPoop.classList.remove('poop-anim');
+                ui.message.textContent = "KATTINTS A KARRA!";
+                isSpinning = false;
+            }, 600);
+        }
+
+        // --- ÚJRAÍRT ESŐ GENERÁTOR ---
+        function startRain(type) {
+            ui.rainContainer.innerHTML = ''; 
+            
+            if (type === 'win') {
+                // NYERÉS: Színes neon konfetti + normál malacok
+                const neonColors = ['#00f3ff', '#ff9900', '#d800ff', '#00ff00'];
+                const winItems = ['🐷', 'neon-rect', 'neon-rect', 'neon-circle', 'neon-tri'];
+                
+                for(let i = 0; i < 60; i++) {
+                    let el = document.createElement('div');
+                    el.className = 'win-item';
+                    let randomItem = winItems[Math.floor(Math.random() * winItems.length)];
+                    
+                    if (randomItem.startsWith('neon')) {
+                        let color = neonColors[Math.floor(Math.random() * neonColors.length)];
+                        el.style.boxShadow = `0 0 10px ${color}, 0 0 20px ${color}`;
+                        if (randomItem === 'neon-rect') {
+                            el.style.width = (Math.random() * 5 + 5) + 'px'; el.style.height = (Math.random() * 15 + 15) + 'px'; el.style.backgroundColor = color;
+                        } else if (randomItem === 'neon-circle') {
+                            let size = (Math.random() * 10 + 10) + 'px'; el.style.width = size; el.style.height = size; el.style.borderRadius = '50%'; el.style.backgroundColor = color;
+                        } else if (randomItem === 'neon-tri') {
+                            el.style.width = '0'; el.style.height = '0'; el.style.borderLeft = '10px solid transparent'; el.style.borderRight = '10px solid transparent'; el.style.borderBottom = '20px solid ' + color; el.style.backgroundColor = 'transparent'; el.style.boxShadow = 'none'; el.style.filter = `drop-shadow(0 0 5px ${color})`;
+                        }
+                    } else {
+                        el.textContent = randomItem; el.style.fontSize = (Math.random() * 2 + 1.5) + 'rem';
+                    }
+                    
+                    el.style.left = Math.random() * 100 + 'vw';
+                    el.style.animationDuration = (Math.random() * 3 + 2.5) + 's';
+                    el.style.animationDelay = (Math.random() * 4) + 's';
+                    ui.rainContainer.appendChild(el);
+                }
+            } else {
+                // VESZTÉS: Gyors vörös digitális eső + halott/fakó malacok
+                for(let i = 0; i < 80; i++) {
+                    let el = document.createElement('div');
+                    
+                    // 15% esély a szomorú/fakó malacra, 85% esély a vörös lézer esőcseppre
+                    if (Math.random() > 0.85) {
+                        el.className = 'loss-pig';
+                        el.textContent = '🐷';
+                        el.style.fontSize = (Math.random() * 1.5 + 1.5) + 'rem';
+                        // Kicsit elforgatjuk, hogy fejjel lefelé/oldalra essen, mint ami kipurcant
+                        el.style.transform = `rotate(${Math.random() * 360}deg)`; 
+                        el.style.left = Math.random() * 100 + 'vw';
+                        el.style.animationDuration = (Math.random() * 2 + 1.5) + 's'; 
+                        el.style.animationDelay = (Math.random() * 2) + 's';
+                    } else {
+                        el.className = 'loss-rain-drop';
+                        el.style.height = (Math.random() * 30 + 20) + 'px';
+                        el.style.left = Math.random() * 100 + 'vw';
+                        el.style.animationDuration = (Math.random() * 0.8 + 0.4) + 's'; // Nagyon gyors zuhanás!
+                        el.style.animationDelay = (Math.random() * 2) + 's';
+                    }
+                    
+                    ui.rainContainer.appendChild(el);
+                }
+            }
+        }
+
+        function stopRain() {
+            ui.rainContainer.innerHTML = '';
+        }
+
+        // --- CANVAS HÁTTÉR ---
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+        let nodes = [];
+        const networkColors = ['#00f3ff', '#ff9900', '#d800ff', '#1a0b2e'];
+
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; initNodes(); }
+        function initNodes() { nodes = []; for(let i=0; i<40; i++) { nodes.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, type: Math.floor(Math.random() * 3), color: networkColors[Math.floor(Math.random() * 3)], size: Math.random() * 8 + 4, connections: [] }); } nodes.forEach(node1 => { nodes.forEach(node2 => { if(node1 !== node2 && Math.random() > 0.85) { const dist = Math.hypot(node1.x - node2.x, node1.y - node2.y); if(dist < 200) node1.connections.push(node2); } }); }); }
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius, color) { let rot = Math.PI / 2 * 3, step = Math.PI / spikes; ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius); for (let i = 0; i < spikes; i++) { ctx.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius); rot += step; ctx.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius); rot += step; } ctx.closePath(); ctx.fillStyle = color; ctx.fill(); }
+        function drawNetwork() { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0, 243, 255, 0.15)'; nodes.forEach(node => { node.connections.forEach(target => { ctx.beginPath(); ctx.moveTo(node.x, node.y); ctx.lineTo(target.x, node.y); ctx.lineTo(target.x, target.y); ctx.stroke(); }); }); nodes.forEach(node => { ctx.fillStyle = node.color; if (node.type === 0) { ctx.beginPath(); ctx.arc(node.x, node.y, node.size, 0, Math.PI*2); ctx.fill(); } else if (node.type === 1) { ctx.fillRect(node.x - node.size, node.y - node.size, node.size*2, node.size*2); } else { drawStar(node.x, node.y, 5, node.size*1.5, node.size*0.7, node.color); } }); }
+        
+        window.addEventListener('resize', resizeCanvas); resizeCanvas(); setInterval(drawNetwork, 100); 
+
+        initReels();
+    </script>
+</body>
+</html>
